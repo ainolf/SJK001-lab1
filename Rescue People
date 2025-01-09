@@ -1,0 +1,52 @@
+import GUI
+import HAL
+import cv2
+import numpy as np
+import utm
+
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+boat_loc = np.array([[40, 16, 48.2], [-3, -49, -3.5]])
+survivors_loc = np.array([[40, 16, 47.23], [-3, -49, -1.78]])
+
+def coord_cart(loc):
+    coord = loc[:, 0] + loc[:, 1] / 60 + loc[:, 2] / 3600
+    return coord
+
+boat_coord = coord_cart(boat_loc)
+survivors_coord = coord_cart(survivors_loc)
+
+boat_utm = np.array(utm.from_latlon(*boat_coord)[:2])
+survivors_utm = np.array(utm.from_latlon(*survivors_coord)[:2])
+
+distance = survivors_utm - boat_utm
+
+HAL.takeoff(3)
+
+frames = cv2.VideoCapture(0)
+
+while True:
+    HAL.set_cmd_pos(distance[0], distance[1], 3, 0.9)
+
+    ret, img = frames.read()
+    if not ret:
+        break
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+    for (x, y, w, h) in faces:
+        cv2.rectangle(img, (x, y), (x+w, y+h), (255, 255, 0), 2)
+        face_utm = np.array(utm.from_latlon(*(HAL.get_gps_position()[:2])))
+        print("Detected face at UTM coordinates:", face_utm)
+
+    cv2.imshow('img', img)
+
+    GUI.showImage(HAL.get_frontal_image())
+    GUI.showLeftImage(HAL.get_ventral_image())
+
+frames.release()
+cv2.destroyAllWindows()
+
+HAL.set_cmd_pos(-distance[0], -distance[1], 3, 0.9)
+HAL.land()
